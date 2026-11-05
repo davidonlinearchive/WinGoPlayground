@@ -2,54 +2,39 @@ package main
 
 import (
 	"fmt"
+	"unsafe"
+
 	"golang.org/x/sys/windows"
 )
 
-/*
-Native C++ syntax
-BOOL CreateProcessW(
-	  [in, optional]      LPCWSTR               lpApplicationName,
-	    [in, out, optional] LPWSTR                lpCommandLine,
-	      [in, optional]      LPSECURITY_ATTRIBUTES lpProcessAttributes,
-	        [in, optional]      LPSECURITY_ATTRIBUTES lpThreadAttributes,
-	          [in]                BOOL                  bInheritHandles,
-	            [in]                DWORD                 dwCreationFlags,
-	              [in, optional]      LPVOID                lpEnvironment,
-	                [in, optional]      LPCWSTR               lpCurrentDirectory,
-	                  [in]                LPSTARTUPINFOW        lpStartupInfo,
-	                    [out]               LPPROCESS_INFORMATION lpProcessInformation
-	                    );
-)
-*/
-
-/*
-func CreateProcess(appName *uint16, commandLine *uint16,
-
-	procSecurity *SecurityAttributes, threadSecurity *SecurityAttributes,
-	inheritHandles bool, creationFlags uint32,
-	env *uint16, currentDir *uint16,
-	startupInfo *StartupInfo, outProcInfo *ProcessInformation)
-	 (err error)
-*/
 func main() {
 	appName := windows.StringToUTF16Ptr(`C:\\Windows\\system32\\notepad.exe`)
 
 	var si windows.StartupInfo
+	si.Cb = uint32(unsafe.Sizeof(si)) // Required: Initialize structure size
+
 	var pi windows.ProcessInformation
+
+	// Use CREATE_NEW_CONSOLE (0x00000010) to spawn in the active user session workspace
 	err := windows.CreateProcess(
 		appName,
 		nil,
 		nil,
 		nil,
 		false,
-		0,
+		windows.CREATE_NEW_CONSOLE,
 		nil,
 		nil,
 		&si,
 		&pi)
 
 	if err != nil {
-		fmt.Printf("%v\n", err)
+		fmt.Printf("CreateProcess failed: %v\n", err)
+		return
 	}
 
+	fmt.Printf("PID: [%v]\n", pi.ProcessId)
+
+	windows.CloseHandle(pi.Process)
+	windows.CloseHandle(pi.Thread)
 }

