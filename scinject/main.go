@@ -143,7 +143,7 @@ func main() {
 	fmt.Printf("Successful thread creation TID:[%v]\n", tid)
 	defer windows.CloseHandle(windows.Handle(hThread))
 
-	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), windows.INFINITE)
+	event, errWait := windows.WaitForSingleObject(windows.Handle(hThread), 5000)
 	if errWait != nil {
 		fmt.Printf("Error waiting for thread{%v}: %v\n", tid, errWait)
 	}
