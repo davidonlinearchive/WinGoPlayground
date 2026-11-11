@@ -1,0 +1,12 @@
+import winim/lean
+
+proc NimMain() {.cdecl, importc.}
+
+
+proc DllMain(hinstDLL: HINSTANCE, fdwReason: DWORD, lpReserved: LPVOID) : BOOL {.stdcall, exportc, dynlib.} = 
+  NimMain()
+
+  if fdwReason == DLL_PROCESS_ATTACH:
+    MessageBox(0, "Successful DLL Injection via nim", "DLL Inject", 0)
+
+  return true
